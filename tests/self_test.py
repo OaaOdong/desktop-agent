@@ -7,6 +7,19 @@
 import os
 import sys
 import tempfile
+import traceback
+
+
+def _flush_print(*a, **k):
+    """print 后立即 flush，并兜底编码：CI 的 en-US 控制台（cp1252）打印
+    中文会抛 UnicodeEncodeError，这里退化成 ASCII 占位，绝不因此中断测试。"""
+    try:
+        print(*a, **k)
+    except UnicodeEncodeError:
+        # 控制台不支持中文时，用 repr 的 ASCII 转义顶替，保证测试继续跑完
+        safe = " ".join(str(x).encode("ascii", "backslashreplace").decode("ascii") for x in a)
+        print(safe, **k)
+    sys.stdout.flush()
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -32,12 +45,12 @@ _loop.WORKSPACE = _TMPWS
 
 
 def check(name, cond):
-    print(f"  [{'PASS' if cond else 'FAIL'}] {name}")
+    _flush_print(f"  [{'PASS' if cond else 'FAIL'}] {name}")
     return cond
 
 
 def test_tools():
-    print("\n== 四工具单元测试 ==")
+    _flush_print("\n== 四工具单元测试 ==")
     ok = True
 
     # read：带行号 + 分页提示
@@ -85,7 +98,7 @@ def test_tools():
 
 
 def test_mcp():
-    print("\n== MCP stdio 客户端 ==")
+    _flush_print("\n== MCP stdio 客户端 ==")
     ok = True
     server = os.path.join(ROOT, "example_server", "weather_server.py")
     client = MCPClient("weather", sys.executable, [server])
@@ -96,7 +109,7 @@ def test_mcp():
         text, is_err = client.call_tool("get_weather", {"city": "杭州"})
         ok &= check("MCP call get_weather 成功", (not is_err) and "杭州" in text)
     except Exception as e:
-        print("  MCP 测试异常：", e)
+        _flush_print("  MCP 测试异常：", e)
         ok = False
     finally:
         client.close()
@@ -118,7 +131,7 @@ class MockLLM:
 
 
 def test_loop():
-    print("\n== Agent 循环端到端 ==")
+    _flush_print("\n== Agent 循环端到端 ==")
     ok = True
     OLD = '        return 0.0  # BUG（演示用）：空列表应该抛 ValueError，这里却返回 0'
     NEW = '        raise ValueError("mean() arg is an empty sequence")'
@@ -154,16 +167,27 @@ def test_loop():
             raised = True
         ok &= check("stats.py 真的被改：mean([]) 抛 ValueError", raised)
     except Exception as e:
-        print("  验证副作用异常：", e)
+        _flush_print("  验证副作用异常：", e)
         ok = False
     return ok
 
 
-if __name__ == "__main__":
+def _main():
     results = []
     results.append(test_tools())
     results.append(test_mcp())
     results.append(test_loop())
-    print("\n========================================")
-    print("全部通过 ✅" if all(results) else "存在失败 ❌")
-    sys.exit(0 if all(results) else 1)
+    _flush_print("\n========================================")
+    _flush_print("ALL PASS" if all(results) else "SOME FAILED")
+    return 0 if all(results) else 1
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(_main())
+    except SystemExit:
+        raise
+    except BaseException:
+        # 任何未捕获异常都打印完整 traceback，保证 CI 日志可读、可定位
+        traceback.print_exc()
+        sys.exit(2)
