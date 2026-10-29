@@ -11,8 +11,23 @@
 - MCP 解决的只是“怎么连”，连上之后更贵、更危险、更难查——所以按需挂载、限权限、日志走 stderr。
 """
 import json
+import os
 import subprocess
 from pathlib import Path
+
+
+def _stdio_env() -> dict:
+    """给 MCP 子进程一个确定的 UTF-8 环境。
+
+    在 en-US 的 Windows（控制台 cp1252）下，子进程若按 cp1252 编码 stdout，
+    写中文（如“杭州 22℃”）会抛 UnicodeEncodeError 直接崩掉，父进程读到
+    “连接关闭”。强制 PYTHONUTF8=1 / PYTHONIOENCODING=utf-8，让 stdio 通道
+    稳定走 UTF-8，不依赖宿主机 locale。
+    """
+    env = dict(os.environ)
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
 
 
 class MCPClient:
@@ -24,7 +39,10 @@ class MCPClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,  # 行缓冲，保证协议消息逐行 flush
+            env=_stdio_env(),
         )
         self._id = 0
         self._read_stderr()  # 吞掉服务端启动期的 stderr（不阻塞）
