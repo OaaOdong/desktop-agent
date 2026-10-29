@@ -1,0 +1,150 @@
+name: Build Windows Installer
+
+# 推送到 main 就自动：跑自测 → PyInstaller 打包 → Inno Setup 做安装包 → 发 Release
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pywebview==5.2 "pyinstaller>=6.11,<7"
+
+      - name: Self test (offline, mock LLM)
+        run: python tests/self_test.py
+
+      - name: Build main app
+        run: >
+          pyinstaller --noconfirm --clean --windowed --name DesktopAgent
+          --add-data "ui;ui"
+          --add-data "example_server;example_server"
+          --collect-all webview
+          --hidden-import clr
+          run_desktop.py
+
+      - name: Build MCP server as standalone exe
+        run: >
+          pyinstaller --noconfirm --clean --onefile --console --name weather_server
+          --distpath dist_mcp example_server/weather_server.py
+
+      - name: Assemble distribution
+        shell: pwsh
+        run: |
+          $out = "dist/DesktopAgent"
+          New-Item -ItemType Directory -Force -Path "$out/example_server" | Out-Null
+          Copy-Item "dist_mcp/weather_server.exe" "$out/example_server/weather_server.exe" -Force
+          Copy-Item ".env.example" "$out/.env.example" -Force
+          Copy-Item "README.md" "$out/README.md" -Force
+          Copy-Item "workspace" "$out/workspace" -Recurse -Force
+
+          # 打包版 mcp.json：command 指向安装目录内的 weather_server.exe
+          # （安装包的机器上不一定有 Python，所以 MCP server 也打成 exe）
+          $mcp = @"
+          {
+            "mcpServers": {
+              "weather": {
+                "command": "example_server/weather_server.exe",
+                "args": []
+              }
+            }
+          }
+          "@
+          Set-Content -Path "$out/mcp.json" -Value $mcp -Encoding UTF8
+
+          # 压缩整个 DesktopAgent 目录（解压后是一个完整文件夹，不会散落一地）
+          Compress-Archive -Path "dist/DesktopAgent" -DestinationPath "dist/DesktopAgent.zip" -Force
+          Get-ChildItem -Recurse $out | Select-Object FullName, Length | Format-Table -AutoSize
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iss = @"
+          [Setup]
+          AppName=My Cursor Desktop Agent
+          AppVersion=1.0.0
+          AppPublisher=desktop-agent
+          DefaultDirName={autopf}\DesktopAgent
+          DefaultGroupName=Desktop Agent
+          DisableProgramGroupPage=yes
+          OutputDir=installer
+          OutputBaseFilename=DesktopAgent-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          ArchitecturesInstallIn64BitMode=x64
+          WizardStyle=modern
+
+          [Languages]
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional tasks:"
+
+          [Files]
+          Source: "dist\DesktopAgent\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{group}\My Cursor Desktop Agent"; Filename: "{app}\DesktopAgent.exe"
+          Name: "{autodesktop}\My Cursor Desktop Agent"; Filename: "{app}\DesktopAgent.exe"; Tasks: desktopicon
+
+          [Run]
+          Filename: "{app}\DesktopAgent.exe"; Description: "Launch now"; Flags: nowait postinstall skipifsilent
+          "@
+          Set-Content -Path "installer.iss" -Value $iss -Encoding UTF8
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer.iss"
+          if (-not (Test-Path "installer/DesktopAgent-Setup.exe")) { throw "installer build failed" }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: |
+            installer/DesktopAgent-Setup.exe
+            dist/DesktopAgent.zip
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: v1.0.${{ github.run_number }}
+          body: |
+            自动构建的 Windows 安装包。
+
+            - `DesktopAgent-Setup.exe`：一键安装（含开始菜单/桌面快捷方式）
+            - `DesktopAgent.zip`：免安装版，解压后运行 `DesktopAgent.exe`
+
+            首次运行前，把 `.env.example` 复制为 `.env` 并填入你的 API Key。
+          files: |
+            installer/DesktopAgent-Setup.exe
+            dist/DesktopAgent.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
