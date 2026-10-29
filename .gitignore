@@ -1,0 +1,17 @@
+# 密钥：进了公开仓库等于已泄露，必须忽略
+.env
+*.env
+
+# 打包产物
+dist/
+build/
+*.exe
+*.dmg
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 运行产物
+logs/
+*.log
