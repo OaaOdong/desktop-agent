@@ -1,0 +1,5 @@
+fastapi==0.115.6
+uvicorn==0.34.0
+websockets==14.1
+# 桌面窗口（可选但推荐）；不装则自动降级到浏览器
+# pywebview==5.2

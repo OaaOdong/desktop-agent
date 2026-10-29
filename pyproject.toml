@@ -1,0 +1,19 @@
+[project]
+name = "desktop-agent"
+version = "1.0.0"
+description = "一个能双击打开的桌面 AI 编程智能体（自己的 Cursor）：四个工具 + MCP"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn==0.34.0",
+    "websockets==14.1",
+    # pywebview 是桌面窗口依赖，安装见 README；未安装时自动降级到浏览器
+    # "pywebview==5.2",
+]
+
+[project.scripts]
+desktop-agent = "run_desktop:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
