@@ -17,13 +17,23 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from agent.config import ROOT, WORKSPACE, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, MAX_STEPS, MCP_CONFIG
+from agent.config import (
+    APP_DIR,
+    BUNDLE_DIR,
+    WORKSPACE,
+    LLM_API_KEY,
+    LLM_BASE_URL,
+    LLM_MODEL,
+    MAX_STEPS,
+    MCP_CONFIG,
+)
 from agent.llm import OpenAICompatibleLLM
 from agent.loop import Agent
 from agent.mcp_client import load_mcp_servers
 from agent.tools import read_file
 
-UI_DIR = ROOT / "ui"
+# ui/ 是只读资源：打包后位于 _MEIPASS，源码运行时位于项目根
+UI_DIR = BUNDLE_DIR / "ui"
 app = FastAPI(title="desktop-agent")
 
 

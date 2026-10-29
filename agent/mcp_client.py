@@ -108,7 +108,8 @@ def load_mcp_servers(config_path: Path) -> list[MCPClient]:
     if not config_path.exists():
         return clients
     try:
-        cfg = json.loads(config_path.read_text(encoding="utf-8"))
+        # utf-8-sig：兼容带 BOM 的 mcp.json（记事本 / 部分 CI 脚本写出来的会带 BOM）
+        cfg = json.loads(config_path.read_text(encoding="utf-8-sig"))
     except Exception as e:
         print(f"[MCP] 读取配置失败：{e}", file=sys.stderr)
         return clients
@@ -118,6 +119,12 @@ def load_mcp_servers(config_path: Path) -> list[MCPClient]:
         # 用当前解释器跑 server，避免 PATH 里的 python 与装了依赖的解释器不是同一个
         if command in ("python", "python3"):
             command = sys.executable
+        # 相对路径的 command（打包版指向 example_server/weather_server.exe）同样
+        # 相对 mcp.json 所在目录解析，否则会跟着启动时的 cwd 乱跑
+        elif ("/" in command or "\\" in command) and not Path(command).is_absolute():
+            cand = (config_path.parent / command).resolve()
+            if cand.exists():
+                command = str(cand)
         args = [str(a) for a in spec.get("args", [])]
         # 把相对路径解析到项目根，避免从不同 cwd 启动时找不到脚本
         resolved = []

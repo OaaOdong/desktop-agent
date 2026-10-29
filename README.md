@@ -6,6 +6,10 @@
 > 这是《Python 编程与案例实务 · 智能体专题》大作业的实现（对应 P35–P39 规格）。
 > 核心设计全部来自课件：Agent = LLM + Tools + Loop；description 就是提示词；M×N → M+N。
 
+**仓库**：https://github.com/OaaOdong/desktop-agent ·
+**安装包**：见仓库 Releases 页（每次 push 到 `main` 由 GitHub Actions 自动构建）
+**提交报告**：[`docs/report.md`](docs/report.md)
+
 ## 目录结构
 
 ```
@@ -33,9 +37,33 @@ desktop-agent/
 ├── workspace/         智能体工作区（stats.py 故意留了 bug 供演示）
 ├── docs/
 │   ├── trace.md       一次完整运行记录（含失败与恢复）
+│   ├── report.md      提交报告（需求对照 + 踩坑复盘 + 评分自检）
 │   └── build.md       打包成安装包说明
+├── .github/workflows/build.yml   CI：push 即自动打包 Windows 安装包并发 Release
 └── tests/             自测与服务器冒烟测试
 ```
+
+## 直接用安装包（不用装 Python）
+
+去仓库 **Releases** 页下载：
+
+- `DesktopAgent-Setup.exe` —— 一键安装，生成开始菜单和桌面快捷方式
+- `DesktopAgent.zip` —— 免安装版，解压后双击 `DesktopAgent.exe`
+
+**首次启动前**：把安装目录里的 `.env.example` 复制为 `.env`，填入 `OPENAI_API_KEY` /
+`OPENAI_BASE_URL` / `OPENAI_MODEL` 三项，再启动。安装包内自带独立的
+`example_server/weather_server.exe`，所以 MCP 不需要系统装 Python。
+
+> 打包版把路径拆成两个概念：`.env`、`workspace/`、`mcp.json` 从 **exe 所在目录**读写
+> （可持久化），`ui/` 从 PyInstaller 的临时解压目录读（只读资源）。详见 `agent/config.py`。
+
+### 自己触发一次构建
+
+```bash
+git push origin main          # 或者到 Actions 页点 "Run workflow"
+```
+
+Actions 会依次跑：离线自测 → PyInstaller 打包 → Inno Setup 生成安装包 → 发布 Release。
 
 ## 三步启动（换台机器也成立）
 
@@ -117,7 +145,9 @@ python run_desktop.py
 - [x] 工具调用可见 + 失败标红 + 可中断（前端三栏 + 中断按钮）
 - [x] MCP 真接上（`example_server/weather_server.py` 已连通，`mcp.json` 配置即挂载）
 - [x] trace 真实（`docs/trace.md`，含一次 edit 不唯一失败与恢复）
-- [x] 报告与取舍（见本 README「如果只能再加一个工具」）
+- [x] 报告与取舍（`docs/report.md`；"只再加一个工具"见下）
+- [x] public 仓库（https://github.com/OaaOdong/desktop-agent）
+- [x] Release 安装包（GitHub Actions 自动构建，见 Releases 页）
 
 ### 如果只能再加一个工具，你加什么？为什么？
 
