@@ -63,6 +63,7 @@ jobs:
           Copy-Item "dist_mcp/weather_server.exe" "$out/example_server/weather_server.exe" -Force
           Copy-Item ".env.example" "$out/.env.example" -Force
           Copy-Item "README.md" "$out/README.md" -Force
+          Copy-Item "DesktopAgent-Launcher.bat" "$out/DesktopAgent-Launcher.bat" -Force
           Copy-Item "workspace" "$out/workspace" -Recurse -Force
 
           # 打包版 mcp.json：command 指向安装目录内的 weather_server.exe
