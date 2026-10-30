@@ -38,14 +38,34 @@ _TRUNC_PIPE = re.compile(r"\|\s*(?:tail|head)\s+(?:-\w+\s+)*(?:-\d+|\d+)\s*$", r
 _current_proc = None
 
 
+def _within(target: Path, root: Path) -> bool:
+    """target 是否落在 root 之内。
+
+    用 normcase 归一（Windows 路径大小写不敏感），用 commonpath 判断包含关系：
+    字符串前缀法在工作区是盘符根（C:\\）时会漏判，跨盘符时应直接判否。
+    """
+    t, r = os.path.normcase(str(target)), os.path.normcase(str(root))
+    try:
+        return os.path.commonpath([t, r]) == r
+    except ValueError:  # 不在同一个盘符
+        return False
+
+
 def _resolve(rel_path: str) -> Path:
-    """把相对路径解析到 WORKSPACE 内，并做越界校验。"""
+    """把相对路径解析到 WORKSPACE 内，并做越界校验。
+
+    两边都必须先 resolve 再比较。WORKSPACE 可能是未归一化的写法——
+    含 8.3 短名（CI runner 的 TEMP 是 C:\\Users\\RUNNER~1\\...）或含 `..`——
+    而 Path.resolve() 会把它展开成长名/规范路径。只 resolve 一边，
+    前缀校验就会把合法路径判成越界（本地 TEMP 没有短名，所以只有 CI 复现）。
+    """
     if not rel_path:
         raise ValueError("路径不能为空")
-    target = (WORKSPACE / rel_path).resolve()
-    if target == WORKSPACE:
+    root = Path(WORKSPACE).resolve()
+    target = (root / rel_path).resolve()
+    if target == root:
         return target
-    if not str(target).startswith(str(WORKSPACE) + os.sep):
+    if not _within(target, root):
         raise ValueError(f"路径越界：{rel_path} 不在工作区 {WORKSPACE} 内")
     return target
 
@@ -193,7 +213,7 @@ def bash(command: str, timeout: int = 60) -> str:
     proc = subprocess.Popen(
         cmd,
         shell=True,
-        cwd=str(WORKSPACE),
+        cwd=str(Path(WORKSPACE).resolve()),  # 与文件工具走同一个规范路径
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
